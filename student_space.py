@@ -70,7 +70,7 @@ def show_student_space():
             st.warning("PDF manquant.")
 
     with col_chat:
-        st.subheader("💬 Assistant Tuteur")
+        st.subheader("Assistant Tuteur")
 
         # Init chat history
         if "messages" not in st.session_state:
