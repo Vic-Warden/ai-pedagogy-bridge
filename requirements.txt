@@ -1,7 +1,8 @@
 streamlit
 langchain
 langchain-community
-langchain-google-genai
+langchain-ollama
 pypdf
 chromadb
 pandas
+plotly

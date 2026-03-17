@@ -1,0 +1,13 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run AI Pedagogy Bridge",
+			"type": "shell",
+			"command": "cd /Users/warden/Documents/Project/RSE/ai-pedagogy-bridge && streamlit run app.py",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}
