@@ -1,6 +1,7 @@
 import streamlit as st
 import csv
 import os
+import re
 import base64
 from datetime import datetime
 import rag_logic
@@ -36,7 +37,7 @@ def analyser_notion(question):
 # Log question + detected topic + student name to CSV for teacher dashboard
 def sauvegarder_question(question):
     notion = analyser_notion(question)
-    eleve = st.session_state.get("student_name", "Anonyme")
+    eleve = st.session_state.get("student_name", "") or "Anonyme"
     file_exists = os.path.isfile(LOG_FILE)
     with open(LOG_FILE, mode="a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
@@ -64,13 +65,24 @@ def sauvegarder_signal(niveau, message, identite):
 
 
 # Render a PDF inside the Streamlit page via a base64 iframe
-def afficher_pdf(chemin_pdf):
+# If page is given, the PDF viewer opens at that page (1-indexed)
+def afficher_pdf(chemin_pdf, page=None):
     with open(chemin_pdf, "rb") as f:
         b64 = base64.b64encode(f.read()).decode("utf-8")
+    page_anchor = f"#page={page + 1}" if page else ""
     st.markdown(
-        f'<iframe src="data:application/pdf;base64,{b64}" width="100%" height="600" type="application/pdf"></iframe>',
+        f'<iframe src="data:application/pdf;base64,{b64}{page_anchor}" '
+        f'width="100%" height="600" type="application/pdf"></iframe>',
         unsafe_allow_html=True,
     )
+
+
+# Extract page numbers mentioned in AI text (e.g. "page 95", "p. 12", "p.42")
+def extraire_pages_du_texte(texte):
+    """Return a sorted list of unique page numbers found in the AI response."""
+    pattern = r'(?:page|p\.?)\s*(\d+)'
+    matches = re.findall(pattern, texte, re.IGNORECASE)
+    return sorted(set(int(m) for m in matches))
 
 
 # Get all student questions from this session
@@ -325,7 +337,7 @@ def _render_revision():
 # Exercise suggestions tab
 def _render_exercices():
     st.subheader("Exercices Suggérés")
-    st.caption("L'IA cherche dans le recueil d'exercices ceux qui correspondent à tes difficultés.")
+    st.caption("L'IA cherche les exercices adaptés à tes difficultés et t'affiche directement la bonne page du recueil.")
 
     questions = get_student_questions()
 
@@ -336,16 +348,58 @@ def _render_exercices():
     else:
         st.write(f"**{len(questions)} question(s)** à analyser.")
 
-        with st.expander("Voir le recueil d'exercices"):
-            afficher_pdf(EXERCISES_PDF)
-
         if st.button("Trouver les exercices adaptés", type="primary", key="btn_exercices"):
             with st.spinner("Recherche des exercices les plus pertinents..."):
-                suggestions = rag_logic.suggerer_exercices(
+                result = rag_logic.suggerer_exercices(
                     st.session_state.exercice_chain, questions
                 )
-            st.session_state.exercices_suggeres = suggestions
+            st.session_state.exercices_suggeres = result["answer"]
+            # Extract pages mentioned by the AI in its response
+            st.session_state.exercices_pages = extraire_pages_du_texte(result["answer"])
+            # Default: show first mentioned page
+            if st.session_state.exercices_pages:
+                st.session_state.exercice_page_courante = st.session_state.exercices_pages[0]
+            else:
+                st.session_state.exercice_page_courante = None
 
         if "exercices_suggeres" in st.session_state:
             st.markdown("---")
-            st.markdown(st.session_state.exercices_suggeres)
+
+            # Layout: suggestions on the left, PDF on the right
+            col_suggestions, col_pdf = st.columns([1, 1])
+
+            with col_suggestions:
+                st.markdown("#### 🎯 Exercices recommandés pour toi")
+                st.markdown(st.session_state.exercices_suggeres)
+
+                # Page navigation buttons
+                pages = st.session_state.get("exercices_pages", [])
+                if pages:
+                    st.markdown("---")
+                    st.markdown("**📄 Voir l'exercice dans le recueil :**")
+                    cols = st.columns(min(len(pages), 4))
+                    for i, page_num in enumerate(pages):
+                        col_idx = i % min(len(pages), 4)
+                        with cols[col_idx]:
+                            is_current = (st.session_state.get("exercice_page_courante") == page_num)
+                            btn_type = "primary" if is_current else "secondary"
+                            if st.button(
+                                f"📖 Page {page_num}",
+                                key=f"btn_page_{page_num}",
+                                type=btn_type,
+                                use_container_width=True,
+                            ):
+                                st.session_state.exercice_page_courante = page_num
+                                st.rerun()
+
+            with col_pdf:
+                page_courante = st.session_state.get("exercice_page_courante")
+                if page_courante:
+                    st.markdown(f"#### Recueil — Page {page_courante}")
+                else:
+                    st.markdown("#### Recueil d'exercices")
+
+                if os.path.exists(EXERCISES_PDF):
+                    afficher_pdf(EXERCISES_PDF, page=page_courante)
+                else:
+                    st.warning("Le fichier exercices.pdf n'est pas disponible.")

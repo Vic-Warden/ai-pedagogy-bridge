@@ -24,6 +24,9 @@ def _load_data():
     if "Élève" not in df.columns:
         df.insert(1, "Élève", "Inconnu")
 
+    # Fill empty / NaN student names with "Anonyme"
+    df["Élève"] = df["Élève"].fillna("Anonyme").replace("", "Anonyme")
+
     return df
 
 
@@ -299,8 +302,6 @@ def _render_signals(signals_df):
     total = len(signals_df)
     anon = int((signals_df["Élève"] == "Anonyme").sum())
     named = total - anon
-
-    st.markdown("#### 🌡️ Thermomètre de Classe")
 
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("🟡 J'ai du mal", nb_yellow)

@@ -80,9 +80,9 @@ ollama serve
 streamlit run app.py
 ```
 
-> **macOS note**: if `python3` points to Homebrew, use `/usr/bin/python3 -m streamlit run app.py`.
+> **macOS note**: if `python3` points to Homebrew, use `/usr/bin/python3 -m streamlit run app.py`
 
-Opens at `http://localhost:8501`.
+Opens at `http://localhost:8501`
 
 ---
 

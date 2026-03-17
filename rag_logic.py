@@ -69,12 +69,16 @@ def initialiser_cerveau_exercices():
     llm = _get_llm()
 
     system_prompt = (
-        "Tu es un assistant pédagogique. À partir du recueil d'exercices ci-dessous, "
-        "propose les exercices les plus pertinents pour aider l'étudiant à travailler "
-        "les notions sur lesquelles il a des difficultés. "
-        "Indique le numéro de l'exercice, la page si possible, et explique brièvement "
-        "pourquoi cet exercice est utile pour sa question. "
-        "Réponds en français.\n\n{context}"
+        "Tu es un assistant pédagogique expert en mathématiques au lycée. "
+        "À partir du recueil d'exercices ci-dessous, propose les exercices les plus "
+        "pertinents pour aider l'étudiant à travailler les notions sur lesquelles il a des difficultés.\n\n"
+        "Pour chaque exercice proposé, tu DOIS indiquer :\n"
+        "- Le numéro de l'exercice\n"
+        "- La page dans le recueil (très important pour que l'élève puisse le retrouver)\n"
+        "- La notion mathématique travaillée\n"
+        "- Pourquoi cet exercice est utile pour la question de l'élève\n"
+        "- Le niveau de difficulté (Facile / Moyen / Difficile)\n\n"
+        "Réponds en français, formate en Markdown.\n\n{context}"
     )
     prompt = ChatPromptTemplate.from_messages([
         ("system", system_prompt),
@@ -85,16 +89,33 @@ def initialiser_cerveau_exercices():
     return create_retrieval_chain(retriever, question_answer_chain)
 
 # Suggest exercises from the exercise PDF based on student questions
+# Returns a dict with "answer" (AI text) and "pages" (list of page numbers from source chunks)
 def suggerer_exercices(exercice_chain, questions):
     if exercice_chain is None:
-        return "Le fichier d'exercices n'est pas disponible."
+        return {"answer": "Le fichier d'exercices n'est pas disponible.", "pages": []}
 
     questions_text = "\n".join(f"- {q}" for q in questions)
     query = (
         f"Voici les questions que l'étudiant a posées :\n{questions_text}\n\n"
-        "Propose les exercices les plus adaptés pour travailler ces points."
+        "Pour CHAQUE question, propose le ou les exercices les plus adaptés.\n"
+        "Pour chaque exercice proposé, indique :\n"
+        "- 📝 **Exercice** : numéro et page\n"
+        "- 🎯 **Notion travaillée** : la notion que cet exercice permet de renforcer\n"
+        "- 💡 **Pourquoi cet exercice** : en quoi il aide à comprendre ce que l'élève a demandé\n"
+        "- 📊 **Difficulté** : Facile / Moyen / Difficile\n\n"
+        "Regroupe par notion si plusieurs exercices portent sur le même thème. "
+        "Formate en Markdown avec des titres et emojis."
     )
-    return exercice_chain.invoke({"input": query})["answer"]
+    result = exercice_chain.invoke({"input": query})
+
+    # Extract page numbers from source documents used by RAG
+    pages = set()
+    for doc in result.get("context", []):
+        page = doc.metadata.get("page")
+        if page is not None:
+            pages.add(int(page))
+
+    return {"answer": result["answer"], "pages": sorted(pages)}
 
 
 # Generate a revision sheet summarizing all student questions
