@@ -6,6 +6,7 @@ import plotly.express as px
 import rag_logic
 
 LOG_FILE = "questions_log.csv"
+SIGNALS_FILE = "signals_log.csv"
 
 # Load question log and add computed columns
 def _load_data():
@@ -26,25 +27,47 @@ def _load_data():
     return df
 
 
+# Load signals from students
+def _load_signals():
+    if not os.path.exists(SIGNALS_FILE):
+        return None
+    df = pd.read_csv(SIGNALS_FILE)
+    if df.empty:
+        return None
+    df["Datetime"] = pd.to_datetime(df["Date"], format="%d/%m/%Y %H:%M", errors="coerce")
+    return df
+
+
 def show_teacher_space():
     st.header("Tableau de Bord Enseignant")
     st.caption("Vue complète des interactions étudiant, analyses IA et recommandations pédagogiques.")
 
     df = _load_data()
-    if df is None:
+    signals_df = _load_signals()
+
+    if df is None and signals_df is None:
         st.info("Aucune question pour le moment. Les données apparaîtront ici quand les élèves utiliseront la plateforme.")
         return
 
-    # ── Tabs (3 tabs: Dashboard, Synthèse IA, Défis Pédagogiques) ──
-    tab_dashboard, tab_synthese, tab_challenges = st.tabs([
-        "Dashboard", "Synthèse IA", "Conseils Pédagogiques"
+    # ── Tabs ──
+    tab_dashboard, tab_signals, tab_synthese, tab_challenges = st.tabs([
+        "Dashboard", "Élèves en difficultés", "Synthèse IA", "Conseils Pédagogiques"
     ])
 
     with tab_dashboard:
-        _render_dashboard(df)
+        if df is not None:
+            _render_dashboard(df)
+        else:
+            st.info("Aucune question enregistrée pour le moment.")
+
+    with tab_signals:
+        _render_signals(signals_df)
 
     with tab_synthese:
-        _render_synthese(df)
+        if df is not None:
+            _render_synthese(df)
+        else:
+            st.info("Aucune donnée à analyser.")
 
     with tab_challenges:
         _render_challenges()
@@ -252,3 +275,122 @@ def _render_challenges():
             mime="text/markdown",
             key="dl_challenges",
         )
+
+
+# Student signals — requests for help sent by students
+def _render_signals(signals_df):
+    st.subheader("Élèves en Difficulté")
+    st.caption(
+        "🟡 = un élève a cliqué « J'ai du mal » (anonyme, 1 clic).  "
+        "🔴 = un élève a demandé de l'aide (message + choix anonyme/nominatif, après 3 questions)."
+    )
+
+    if signals_df is None or signals_df.empty:
+        st.info("Aucun signal reçu pour le moment.")
+        return
+
+    # Backwards-compat: if old CSV has no Niveau column
+    if "Niveau" not in signals_df.columns:
+        signals_df["Niveau"] = "rouge"
+
+    # ── Thermometer: class-level overview ──
+    nb_yellow = int((signals_df["Niveau"] == "jaune").sum())
+    nb_red = int((signals_df["Niveau"] == "rouge").sum())
+    total = len(signals_df)
+    anon = int((signals_df["Élève"] == "Anonyme").sum())
+    named = total - anon
+
+    st.markdown("#### 🌡️ Thermomètre de Classe")
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("🟡 J'ai du mal", nb_yellow)
+    c2.metric("🔴 Besoin d'aide", nb_red)
+    c3.metric("Anonymes", anon)
+    c4.metric("Nominatifs", named)
+
+    # Visual progress bar — proportion of reds
+    if total > 0:
+        red_ratio = nb_red / total
+        if red_ratio > 0.5:
+            bar_color = "🔴"
+            bar_msg = "**Alerte** — plus de la moitié des signaux sont des demandes d'aide urgentes."
+        elif red_ratio > 0.25:
+            bar_color = "🟠"
+            bar_msg = "Attention — quelques élèves ont vraiment besoin d'aide."
+        else:
+            bar_color = "🟢"
+            bar_msg = "Situation sous contrôle — les signaux sont principalement des « j'ai du mal »."
+
+        st.progress(red_ratio, text=f"{bar_color} {nb_red}/{total} signaux rouges")
+        st.caption(bar_msg)
+
+    st.divider()
+
+    # ── Charts ──
+    col_pie1, col_pie2 = st.columns(2)
+
+    with col_pie1:
+        st.markdown("#### Jaune vs Rouge")
+        pie1 = pd.DataFrame({
+            "Niveau": ["🟡 J'ai du mal", "🔴 Besoin d'aide"],
+            "Nombre": [nb_yellow, nb_red],
+        })
+        fig1 = px.pie(
+            pie1, values="Nombre", names="Niveau",
+            color_discrete_sequence=["#ffd43b", "#ff6b6b"],
+            hole=0.4,
+        )
+        fig1.update_layout(height=280, margin=dict(l=10, r=10, t=10, b=10))
+        st.plotly_chart(fig1, use_container_width=True)
+
+    with col_pie2:
+        st.markdown("#### Anonyme vs Nominatif")
+        pie2 = pd.DataFrame({
+            "Type": ["Anonyme", "Nominatif"],
+            "Nombre": [anon, named],
+        })
+        fig2 = px.pie(
+            pie2, values="Nombre", names="Type",
+            color_discrete_sequence=["#868e96", "#51cf66"],
+            hole=0.4,
+        )
+        fig2.update_layout(height=280, margin=dict(l=10, r=10, t=10, b=10))
+        st.plotly_chart(fig2, use_container_width=True)
+
+    st.divider()
+
+    # ── Signals journal ──
+    st.markdown("#### Journal des Signaux")
+
+    # Add emoji level column for display
+    display_df = signals_df.copy()
+    display_df["Type"] = display_df["Niveau"].map({"jaune": "🟡 J'ai du mal", "rouge": "🔴 Besoin d'aide"})
+    display_cols = [c for c in ["Date", "Type", "Élève", "Message", "Nb Questions"] if c in display_df.columns]
+
+    # Filter by level
+    filter_level = st.radio(
+        "Filtrer :", ["Tous", "🟡 Jaune uniquement", "🔴 Rouge uniquement"],
+        horizontal=True, key="filter_signal_level",
+    )
+    if filter_level == "🟡 Jaune uniquement":
+        display_df = display_df[display_df["Niveau"] == "jaune"]
+    elif filter_level == "🔴 Rouge uniquement":
+        display_df = display_df[display_df["Niveau"] == "rouge"]
+
+    st.dataframe(
+        display_df[display_cols].sort_values("Date", ascending=False),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.divider()
+
+    # ── Export ──
+    csv_data = display_df[display_cols].to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "Exporter les signaux en CSV",
+        data=csv_data,
+        file_name=f"signaux_export_{datetime.now().strftime('%Y%m%d')}.csv",
+        mime="text/csv",
+        key="dl_signals",
+    )
