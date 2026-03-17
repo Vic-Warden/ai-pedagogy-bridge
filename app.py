@@ -2,7 +2,7 @@ import streamlit as st
 import student_space
 import teacher_space
 
-# ── Page config ───────────────────────────────────────────────────
+# Page config
 st.set_page_config(
     page_title="AI Pedagogy Bridge",
     page_icon="🎓",
@@ -10,7 +10,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── Sidebar ───────────────────────────────────────────────────────
+# Sidebar
 with st.sidebar:
     st.markdown(
         """
@@ -28,16 +28,12 @@ with st.sidebar:
 
     page = st.radio(
         "Choisissez votre espace :",
-        ["🎒 Espace Étudiant", "🎓 Espace Professeur"],
+        ["Espace Étudiant", "Espace Professeur"],
         label_visibility="collapsed",
     )
 
-    st.divider()
-    st.caption("🔒 100 % local — aucune donnée ne quitte votre machine.")
-    st.caption("Propulsé par Ollama · LLaMA 3.2")
-
-# ── Page routing ──────────────────────────────────────────────────
-if page == "🎒 Espace Étudiant":
+# Page routing
+if page == "Espace Étudiant":
     student_space.show_student_space()
 else:
     teacher_space.show_teacher_space()
