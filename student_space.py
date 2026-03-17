@@ -29,15 +29,16 @@ def analyser_notion(question):
         return "Méthode générale / Autre"
 
 
-# Log question + detected topic to CSV for teacher dashboard
+# Log question + detected topic + student name to CSV for teacher dashboard
 def sauvegarder_question(question):
     notion = analyser_notion(question)
+    eleve = st.session_state.get("student_name", "Anonyme")
     file_exists = os.path.isfile(LOG_FILE)
     with open(LOG_FILE, mode="a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if not file_exists:
-            writer.writerow(["Date", "Chapitre/Notion", "Question posée"])
-        writer.writerow([datetime.now().strftime("%d/%m/%Y %H:%M"), notion, question])
+            writer.writerow(["Date", "Élève", "Chapitre/Notion", "Question posée"])
+        writer.writerow([datetime.now().strftime("%d/%m/%Y %H:%M"), eleve, notion, question])
 
 
 # Render a PDF inside the Streamlit page via a base64 iframe
@@ -62,7 +63,25 @@ def get_student_questions():
 def show_student_space():
     st.header("Espace Étudiant")
 
-    # Init RAG chains once per session 
+    # Initialize student name in session state
+    if "student_name" not in st.session_state:
+        st.session_state.student_name = ""
+
+    if not st.session_state.student_name:
+        st.info("Identifie-toi pour commencer !")
+        with st.form("student_id_form"):
+            name_input = st.text_input("Ton prénom et nom :", placeholder="Ex : Marie Dupont")
+            submitted = st.form_submit_button("Valider", type="primary")
+            if submitted and name_input.strip():
+                st.session_state.student_name = name_input.strip()
+                st.rerun()
+            elif submitted:
+                st.warning("Merci d'entrer ton nom pour continuer.")
+        return 
+
+    st.success(f"Connecté(e) en tant que **{st.session_state.student_name}**")
+
+    # Init RAG chains once per session
     if "rag_chain" not in st.session_state:
         if os.path.exists(PDF_PATH):
             with st.spinner("Chargement du cours..."):
@@ -106,9 +125,7 @@ def show_student_space():
                     st.chat_message(msg["role"]).write(msg["content"])
 
             if question := st.chat_input("Une notion n'est pas claire ?"):
-                st.chat_message("user").write(question)
                 st.session_state.messages.append({"role": "user", "content": question})
-
                 sauvegarder_question(question)
 
                 if "rag_chain" in st.session_state:
@@ -119,10 +136,11 @@ def show_student_space():
                 else:
                     reponse_ia = "Cours non chargé."
 
-                st.chat_message("assistant").write(reponse_ia)
                 st.session_state.messages.append({"role": "assistant", "content": reponse_ia})
+                st.rerun()
 
-     with tab_revision:
+    # Revision sheet tab
+    with tab_revision:
         st.subheader("Fiche de Révision Personnalisée")
         st.caption("L'IA génère une fiche de révision basée sur toutes tes questions.")
 
@@ -142,9 +160,8 @@ def show_student_space():
                 st.markdown("---")
                 st.markdown(st.session_state.fiche_revision)
 
-                # Download button
                 st.download_button(
-                    label="⬇️ Télécharger la fiche (.md)",
+                    label="Télécharger la fiche (.md)",
                     data=st.session_state.fiche_revision,
                     file_name="fiche_revision.md",
                     mime="text/markdown",

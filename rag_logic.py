@@ -121,25 +121,28 @@ def generer_synthese_enseignant(df):
 
     questions_list = df["Question posée"].tolist()
     notions_list = df["Chapitre/Notion"].tolist()
+    eleves_list = df["Élève"].tolist() if "Élève" in df.columns else ["Inconnu"] * len(df)
 
     data_text = "\n".join(
-        f"- [{notion}] {question}"
-        for notion, question in zip(notions_list, questions_list)
+        f"- [{eleve}] [{notion}] {question}"
+        for eleve, notion, question in zip(eleves_list, notions_list, questions_list)
     )
 
     prompt = (
         "Tu es un expert en analyse pédagogique. Voici l'ensemble des questions posées "
-        "par les étudiants sur un chapitre de mathématiques :\n\n"
+        "par les étudiants sur un chapitre de mathématiques. "
+        "Chaque ligne contient le nom de l'élève, la notion et la question :\n\n"
         f"{data_text}\n\n"
         "Produis un **rapport de synthèse pour l'enseignant** qui comprend :\n"
         "1. **Vue d'ensemble** : quelles notions posent le plus de problèmes ?\n"
-        "2. **Analyse thématique** : pour chaque notion identifiée, décris le type de difficulté "
+        "2. **Analyse par élève** : quels élèves semblent le plus en difficulté et sur quoi ?\n"
+        "3. **Analyse thématique** : pour chaque notion identifiée, décris le type de difficulté "
         "(compréhension, méthode, vocabulaire, etc.)\n"
-        "3. **Signaux faibles** : questions atypiques ou erreurs récurrentes à surveiller\n"
-        "4. **Recommandations** : actions concrètes pour le prochain cours "
-        "(exercices à refaire, points à ré-expliquer, activités suggérées)\n"
-        "5. **Suggestion d'intégration** : comment utiliser ces données au quotidien au lycée "
-        "(en début de cours, en AP, en remédiation…)\n"
+        "4. **Signaux faibles** : questions atypiques, élèves qui posent la même question "
+        "plusieurs fois, erreurs récurrentes à surveiller\n"
+        "5. **Recommandations** : actions concrètes pour le prochain cours "
+        "(exercices à refaire, points à ré-expliquer, activités suggérées, "
+        "élèves à accompagner en priorité)\n"
         "Formate en Markdown, sois concis et actionnable."
     )
     return llm.invoke(prompt).content
@@ -164,23 +167,26 @@ def analyser_notion_profonde(notion, questions):
     )
     return llm.invoke(prompt).content
 
-# Generate creative tips for teachers on how to use the platform daily
-def generer_conseils_pedagogiques():
+# Generate creative ideas
+def generer_challenges_pedagogiques():
     llm = _get_llm()
 
     prompt = (
-        "Tu es un conseiller pédagogique spécialisé dans l'intégration du numérique au lycée.\n\n"
-        "Un enseignant de mathématiques utilise une plateforme d'IA pédagogique qui :\n"
-        "- Permet aux élèves de poser des questions sur le cours via un chatbot RAG\n"
-        "- Génère des fiches de révision personnalisées\n"
-        "- Suggère des exercices adaptés aux difficultés de chaque élève\n"
-        "- Fournit un tableau de bord analytics montrant les questions et difficultés des élèves\n\n"
-        "Propose **5 scénarios d'usage créatifs** pour intégrer cette plateforme dans la vie "
-        "quotidienne d'un lycée. Pour chaque scénario :\n"
-        "- Donne un titre accrocheur avec emoji\n"
-        "- Décris le contexte (AP, début de cours, devoir maison, etc.)\n"
-        "- Explique les étapes concrètes\n"
-        "- Indique le bénéfice attendu\n"
-        "Formate en Markdown, sois inspirant et pratique."
+        "Tu es un game designer pédagogique spécialisé dans la gamification de l'enseignement "
+        "des mathématiques au lycée.\n\n"
+        "Un enseignant utilise une plateforme d'IA pédagogique qui permet aux élèves de :\n"
+        "- Poser des questions sur le cours via un chatbot IA\n"
+        "- Générer des fiches de révision personnalisées\n"
+        "- Recevoir des exercices adaptés à leurs difficultés\n\n"
+        "Invente **5 défis/challenges créatifs format gaming** pour motiver les élèves et "
+        "rendre les maths plus engageantes. Pour chaque défi :\n"
+        "- **Nom du défi** : un nom fun et accrocheur\n"
+        "- **Format** : durée, contexte (en classe, à la maison, en équipe, solo)\n"
+        "- **Règles du jeu** : étapes claires et simples\n"
+        "- **Système de points/récompenses** : comment on gagne, badges, niveaux\n"
+        "- **Variante avancée** : comment corser le défi pour les meilleurs\n"
+        "- **Compétence travaillée** : ce que l'élève développe en jouant\n\n"
+        "Sois inventif, inspiré par les jeux vidéo, les escape games, les quiz TV, etc. "
+        "Formate en Markdown avec des emojis."
     )
     return llm.invoke(prompt).content
